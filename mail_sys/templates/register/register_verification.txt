@@ -1,0 +1,12 @@
+Welcome to Proxi!
+
+To get yourself started, you need to confirm your account. Just click on the link below.
+
+{{}}
+
+Or use this confirmation code: {{}}
+
+if you have any problems, contact help: {{}}
+
+Thank you,
+The Proxi Team.
