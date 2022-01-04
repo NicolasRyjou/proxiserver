@@ -2,9 +2,9 @@ import mysql.connector
 import json
 import datetime
 
-with open("C:/Users/nicol/OneDrive/Documents/Coding/Other/Proxi Website/backend/globalVariables.json", "r") as f:
+with open("./globalVariables.json", "r") as f:
     gVar_total = json.load(f)
-    gVar = gVar_total["db_d"]
+    gVar = gVar_total["db_d"] 
 
 mydb = mysql.connector.connect(
   host=gVar["host"],
@@ -102,6 +102,13 @@ def get_chat_d(chat_id):
         print("Couldn't get data: {}".format(err))
 
 #MESSAGES
+def get_msg_by_msg_id(message_id):
+    try:
+        dbcursor.execute("SELECT * FROM messages WHERE message_id {}".format(message_id))
+        result = dbcursor.fetchall()
+        return result
+    except Exception as err:
+        print("Couldn't get data: {}".format(err))
 
 def get_msg_list_by_chat(chat_id):
     try:
@@ -167,8 +174,9 @@ def get_user(user_id):
 
 def get_user_though_email(email):
     try:
-        dbcursor.execute("SELECT * FROM users WHERE email '{}'".format(email))        
-        return dbcursor.fetchone()[0]
+        dbcursor.execute("SELECT * FROM users WHERE email = '{}'".format(str(email)))  
+        result = dbcursor.fetchone()  
+        return result[0]
     except Exception as err:
         print("Couldn't get data: {}".format(err))
 

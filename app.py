@@ -1,5 +1,3 @@
-from re import I
-import re
 from flask import Flask
 from flask import request
 from flask import redirect
@@ -7,23 +5,22 @@ from flask_restful import Resource, Api
 from flask_cors import CORS
 from flask_socketio import (
   SocketIO,
-  Namespace,
   join_room,
   leave_room
 )
-from webargs import fields, validate
-from webargs.flaskparser import use_kwargs, parser
-from werkzeug.datastructures import ResponseCacheControl
+from webargs import fields
+from webargs.flaskparser import use_kwargs
 
-from mail_sys import email_bot as mail
+import smtplib, ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 import sqldb 
 import json
-import sys
 import random
 import math
 
-with open("C:/Users/nicol/OneDrive/Documents/Coding/Other/Proxi Website/backend/globalVariables.json", "r") as f:
+with open("./globalVariables.json", "r") as f:
     gVar_total = json.load(f)
     gVar = gVar_total["flask_app_d"]
 
@@ -47,38 +44,43 @@ app.config['SECRET_KEY'] = gVar["secret_key"]
 EMAIL_ADDRESS = 'noReplyProxi@gmail.com'
 EMAIL_PASSWORD = 'proxiNoReply'
 PROXI_DOMAIN = 'https://127.0.0.1:5000'
+
+#REGISTRATION EMAIL
+with open('./register_verification.txt', 'r') as file:
+    reg_ver_txt_file = file.read().replace('\n', '')
+with open('./register_verification_html.txt', 'r') as file:
+    reg_ver_html_file = file.read().replace('\n', '')
+
 print("\n\n\n\n\n********** PLEASE VERIFY THAT PROXI DOMAIN IS CHANGED WHEN WEBSITE PUBLISHED **********\n\n\n\n\n")
 
 #SOCKETIO
 @socketio.on('join')
 def on_join(data_jsonned):
     data = json.loads(data_jsonned)
-    print(data)
     user_id = data['user_id']
     room = data['chat_id']
     user_data = sqldb.get_user(user_id)
+    print(user_data)
     join_room(room)
-    socketio.send(user_data["f_name"] + " " + user_data["s_name"] + ' has entered the room.', user_data, to=room)
 
 @socketio.on('leave')
 def on_leave(data):
-    user_id = data['user_id']
+    data = json.loads(data)
     room = data['chat_id']
-    user_data = sqldb.get_user(user_id)
     leave_room(room)
-    socketio.send(user_data["f_name"] + " " + user_data["s_name"]  + ' has left the room.', user_data, to=room)
 
 @socketio.on('message')
 def on_new_message(data_json):
     data = json.loads(data_json)
-    sqldb.add_msg(
+    new_message_id = sqldb.add_msg(
       data["chat_id"],
       data["content"],
       int(data["user_id"]),
       data["image"]["content"]
     )
+    new_data = sqldb.get_msg_by_msg_id(new_message_id)
+    print(new_data)
     print(">>> Recieved message from {} on chat {}. CONTENT: {}".format(data["user_id"],data["chat_id"],data["content"]))
-    socketio.emit('message', data, room=request.sid)
     socketio.emit('message', data, room=data['chat_id'])
 
 @socketio.on('delete_message')
@@ -122,20 +124,20 @@ class Chats(Resource):
 class User(Resource):
     def post(self, user_id):
         user_data = json.loads(request.data)
-        print(user_data)
-        print(user_data["firstName"])
-        # try:
-        sqldb.add_user(
-          user_data["firstName"],
-          user_data["lastName"],
-          user_data["bio"],
-          user_data["email"],
-          user_data["profPicB64"],
-          user_data["profPicFilePath"],
-          user_data["birthday"],
-        )
-        # except Exception as err:
-        #   print("Couldn't understand POST request to user:",err)
+        try:
+          sqldb.add_user(
+            user_data["firstName"],
+            user_data["lastName"],
+            user_data["bio"],
+            user_data["email"],
+            user_data["profPicB64"],
+            user_data["profPicFilePath"],
+            user_data["birthday"],
+          )
+          return_string = {"user_id":sqldb.get_user_though_email(user_data["email"])}
+          return json.dumps(return_string)
+        except Exception as err:
+          print("Couldn't understand POST request to user:",err)
 
     @use_kwargs({'email': fields.Str(missing='default_val')}, location="query")
     def get(self, user_id):
@@ -167,11 +169,12 @@ class User(Resource):
         except Exception as err:
           print("Couldn't delete user {}: {}".format(user_id, err))
 class Messages(Resource):
-    #@use_kwargs({'hwmny': fields.Str(missing='default_val')}, location="query")
+    @use_kwargs({'hwmny': fields.Str(missing='default_val')}, location="query")
     def get(chat_id, hwmny):
         print(hwmny)
         try:
           temp_all = sqldb.get_msg_list_by_chat(chat_id)
+          print(temp_all)
           #temp_return = []
           #for i in range(hwmny):
           #  print(temp_all[len(temp_all)-i])
@@ -206,7 +209,7 @@ class VerifyUser(Resource):
     def post(self, email):
       random_code_temp = random.randint(100000, 999999)
       sqldb.create_new_confirmation_code(email, random_code_temp)
-      mail.send_confirmation_of_email(email, EMAIL_PASSWORD, EMAIL_ADDRESS, PROXI_DOMAIN, random_code_temp)  
+      send_confirmation_of_email(email, EMAIL_PASSWORD, EMAIL_ADDRESS, PROXI_DOMAIN, random_code_temp)  
 class GetUserId(Resource):
   @use_kwargs({'email': fields.Str(missing='default_val')}, location="query")
   def get(self, email):
@@ -229,11 +232,43 @@ class GlobalVariables(Resource):
     except:
       return {"success": False}
 
+def sendSMTP_mail(sender, password, receiver, message, email_use):
+    context = ssl.create_default_context()
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.ehlo()
+        server.starttls(context=context)
+        server.ehlo()
+        server.login(sender, password)
+        server.sendmail(
+            sender, receiver, message.as_string()
+        )
+    print("Send email to: {} {}".format(receiver, email_use))
+
+def send_confirmation_of_email(reciever, password, sender_email, proxi_domain_base, code):
+    message = MIMEMultipart("alternative")
+    message["Subject"] = "Verification Code"
+    message["From"] = sender_email
+    message["To"] = reciever
+
+    proxiHelpLink = proxi_domain_base + '/help'
+    proxiCodeLink = proxi_domain_base + '/api/verify?email={}&code={}&origin={}'.format(reciever, code, "email")
+
+    text_rendered = reg_ver_txt_file.format(proxiCodeLink, code, proxiHelpLink)
+    html_rendered = reg_ver_html_file.format(proxiCodeLink, code, proxiHelpLink)
+
+    part1 = MIMEText(text_rendered, "plain")
+    part2 = MIMEText(html_rendered, "html")
+
+    message.attach(part1)
+    message.attach(part2)
+
+    sendSMTP_mail(sender_email, password, reciever, message, 'VERIFICATION EMAIL. CODE => {}'.format(code))
+
 def on_init():
   api.add_resource(Chats, '/api/chats/<int:chat_id>')
   api.add_resource(User, '/api/user/<int:user_id>')
   api.add_resource(Location, '/api/process/location')
-  api.add_resource(Messages, '/api/get-messages/<int:chat_id>/')
+  api.add_resource(Messages, '/api/get-messages/<int:chat_id>')
   api.add_resource(VerifyUser, '/api/verify')
   api.add_resource(GetUserId, '/api/get-user-id')
   api.add_resource(GlobalVariables, '/api/variables')

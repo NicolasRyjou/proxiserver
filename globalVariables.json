@@ -1,0 +1,12 @@
+{
+    "db_d":{
+        "host":"localhost",
+        "user":"root",
+        "password":"adminadmin",
+        "dbname":"proxi_db",
+        "port":"3306"
+    },
+    "flask_app_d":{
+        "secret_key":"dase213hffcu12bcieuh1efvygv3u2biu89767tf86vgyeuhuiquw3"
+    }
+}
