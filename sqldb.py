@@ -172,6 +172,17 @@ def get_user(user_id):
     except Exception as err:
         print("Couldn't get data: {}".format(err))
 
+def get_user_is_existing(email):
+    try:
+        dbcursor.execute("SELECT count(*) FROM users WHERE email = '{}'".format(email))
+        is_existing = False
+        if dbcursor.fetchone()[0]>0:
+            print(dbcursor.fetchone()[0])
+            is_existing=True
+        return is_existing
+    except Exception as err:
+        print("Couldn't get data: {}".format(err))
+
 def get_user_though_email(email):
     try:
         dbcursor.execute("SELECT * FROM users WHERE email = '{}'".format(str(email)))  
@@ -235,3 +246,24 @@ def check_confirmation_code(email):
     except Exception as err:
         print("Couldn't get confirmation code: {}".format(err))
 
+def add_visited_chat(user_id, chat_id):
+    try:
+        sql = "INSERT INTO users_visited (chat_id, user_id, visited_on) VALUES (%s, %s, %s)"
+        val = (chat_id, user_id, datetime.datetime.now())
+        dbcursor.execute(sql, val)
+        mydb.commit()
+    except Exception as err:
+        print("Error: {}".format(err))
+
+def return_recent_chats_ids(user_id):
+    try:
+        sql = "SELECT chat_id FROM users_email WHERE user_id = '{}'".format(user_id)
+        dbcursor.execute(sql)
+        mydb.commit()
+        myresult = dbcursor.fetchall()
+        temp = []
+        for i in myresult:
+            temp.append[myresult[i]]
+        return {"code":myresult}
+    except Exception as err:
+        print("Couldn't get recent chats: {}".format(err))

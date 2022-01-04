@@ -1,6 +1,8 @@
+import re
 from flask import Flask
 from flask import request
 from flask import redirect
+from flask.wrappers import Response
 from flask_restful import Resource, Api
 from flask_cors import CORS
 from flask_socketio import (
@@ -19,6 +21,7 @@ import sqldb
 import json
 import random
 import math
+import time
 
 with open("./globalVariables.json", "r") as f:
     gVar_total = json.load(f)
@@ -60,7 +63,7 @@ def on_join(data_jsonned):
     user_id = data['user_id']
     room = data['chat_id']
     user_data = sqldb.get_user(user_id)
-    print(user_data)
+    sqldb.add_visited_chat(user_id, room)
     join_room(room)
 
 @socketio.on('leave')
@@ -125,6 +128,8 @@ class User(Resource):
     def post(self, user_id):
         user_data = json.loads(request.data)
         try:
+          if sqldb.get_user_is_existing(user_data["email"]):
+            return {"user_id": sqldb.get_user_though_email(user_data["email"]), "is_existing": True}
           sqldb.add_user(
             user_data["firstName"],
             user_data["lastName"],
@@ -134,7 +139,8 @@ class User(Resource):
             user_data["profPicFilePath"],
             user_data["birthday"],
           )
-          return_string = {"user_id":sqldb.get_user_though_email(user_data["email"])}
+          time.sleep(100)
+          return_string = {"user_id":sqldb.get_user_though_email(user_data["email"]), "is_existing": False}
           return json.dumps(return_string)
         except Exception as err:
           print("Couldn't understand POST request to user:",err)
@@ -232,6 +238,13 @@ class GlobalVariables(Resource):
     except:
       return {"success": False}
 
+class RecentChats(Resource):
+  def get(user_id):
+    try:
+      return sqldb.return_recent_chats_ids(user_id)
+    except Exception as err:
+          print("Couldn't get recent chats: {}".format(err))
+
 def sendSMTP_mail(sender, password, receiver, message, email_use):
     context = ssl.create_default_context()
     with smtplib.SMTP("smtp.gmail.com", 587) as server:
@@ -272,6 +285,7 @@ def on_init():
   api.add_resource(VerifyUser, '/api/verify')
   api.add_resource(GetUserId, '/api/get-user-id')
   api.add_resource(GlobalVariables, '/api/variables')
+  api.add_resource(RecentChats, '/api/recent/<int:user_id>')
 
   chat_table_params = [
       "chat_id INT AUTO_INCREMENT",
@@ -314,6 +328,12 @@ def on_init():
     "email TEXT",
     "confirmation_code INT",
     "confirmed_email BOOLEAN"]
+  usrs_visited_chat_params = [
+    "id INT AUTO_INCREMENT",
+    "PRIMARY KEY (id)",
+    "user_id INT",
+    "chat_id INT",
+    "visited_on DATE",]
 
   gVar['chatNumber'] = sqldb.get_rows_num('chats')
   
@@ -322,12 +342,14 @@ def on_init():
   sqldb.drop_table("chat_usrs")
   sqldb.drop_table("users")
   sqldb.drop_table("users_email")
+  sqldb.drop_table("users_visited")
   
   sqldb.gen_table("chats", chat_table_params)
   sqldb.gen_table("messages", messages_table_params)
   sqldb.gen_table("chat_usrs", chat_users_params)
   sqldb.gen_table("users", usrs_table_params)
   sqldb.gen_table("users_email", usrs_email_table_params) 
+  sqldb.gen_table("users_visited", usrs_visited_chat_params) 
 
 if __name__ == '__main__':
   on_init()
