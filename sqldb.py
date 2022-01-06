@@ -79,10 +79,22 @@ def get_chat_list():
     try:
         dbcursor.execute("SELECT * FROM chats")
         result = dbcursor.fetchall()
-        return result
+        return_dict = []
+        for i in range(len(result)-1):
+            chat_json = {
+                "chat_id":result[i][0],
+                "creator_id":result[i][1],
+                "name":result[i][2],
+                "description":result[i][3],
+                "image":result[i][4],
+                "created_on":result[i][6].strftime('%m/%d/%Y'),
+                "loc_latitude":result[i][7],
+                "loc_longitude":result[i][8],
+            }
+            return_dict.append(chat_json)
+        return return_dict
     except Exception as err:
         print("Couldn't get data: {}".format(err))
-
 def get_chat_d(chat_id):
     try:
         dbcursor.execute("SELECT * FROM chats WHERE chat_id = {}".format(chat_id))
@@ -112,7 +124,7 @@ def get_msg_by_msg_id(message_id):
 
 def get_msg_list_by_chat(chat_id):
     try:
-        dbcursor.execute("SELECT * FROM messages WHERE chat_id = {}".format(chat_id))
+        dbcursor.execute("SELECT * FROM messages WHERE chat_id = {} WHERE".format(chat_id))
         result = dbcursor.fetchall()
         processed_result = []
         for i in range(len(result)-1):
@@ -122,7 +134,7 @@ def get_msg_list_by_chat(chat_id):
                 "chatId": result[i-1][2],
                 "content": result[i-1][3],
                 "sendOn": result[i-1][5].strftime('%m/%d/%Y %H:%M:%S'),
-                "imageB64": result[i-1][4]
+                "imageB64": str(result[i-1][4])
             }
             processed_result.append(dict_result)
         return processed_result

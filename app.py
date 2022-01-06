@@ -170,20 +170,12 @@ class Messages(Resource):
     @use_kwargs({'hwmny': fields.Str(missing='default_val')}, location="query")
     def get(self, chat_id, hwmny):
         try:
-          temp_all = {"messages":sqldb.get_msg_list_by_chat(chat_id)}
-          return json.dumps(temp_all, default=str)
+          '''json.dumps('''''', default=str)'''
+          temp_all = sqldb.get_msg_list_by_chat(chat_id)
+          return temp_all
         except Exception as err:
           print(err)
-          return json.dumps({"messages":[{"content":"couldn't get messages", "user_id":1, "chat_id":1, "image":{"filename":"None", "content":"nonenoenoenoeneoneoenoenoeneoneneoineoneoneoneonenoene"}}]})
-class Location(Resource):
-    def get(self):
-      points = json.loads(request.data)
-      p1 = points["point1"]
-      p2 = points["point2"]
-      r = 6371
-      distance =  2*r*math.asin(math.sqrt(math.sin(math.degrees((p2["lat"]-p1["lat"])/2))**2+(1-(math.degrees(math.sin((p2["lat"]-p1["lat"])/2)**2))-(math.degrees(math.sin((p2["lat"]+p1["lat"])/2)**2)))*(math.degrees(math.sin((p2["lng"]-p1["lng"])/2)**2))))
-      print(distance)
-      return {"distance": distance}
+          return json.dumps({"messages":[{"content":"couldn't get messages", "user_id":1, "chat_id":1, "image":{"filename":"None", "content":"nonenoenoenoeneoneoenoenoeneoneneoineoneoneoneonenoene"}}]})    
 class VerifyUser(Resource):
     @use_kwargs({'email': fields.Str(missing='default_val'),'code': fields.Str(missing='default_val'),'origin': fields.Str(missing='default_val')}, location="query")
     def get(self, code, email, origin):
@@ -231,7 +223,24 @@ class RecentChats(Resource):
       return json.dumps(sqldb.return_recent_chats_ids(user_id))
     except Exception as err:
           print("Couldn't get recent chats: {}".format(err))
+class GetNearMe(Resource):
+    def get(self):
+      location_data = json.loads(request.data.decode('utf-8'))
+      print("LOCATION DATA: {}".format(location_data))
+      chat_list = sqldb.get_chat_list()
+      return_list = []
+      max_dist = location_data["max_radius"]
+      p1 = {"lat":location_data["lat"], "lng":location_data["lng"]}
+      for i in range(len(chat_list)-1):
+        p2 = {"lat":chat_list[i]["loc_latitude"], "lng":chat_list[i]["loc_longitude"]}
+        if get_distance_between(p1, p2)<max_dist:
+          return_list.append(chat_list[i]["chat_id"])
+      return return_list
 
+def get_distance_between(p1, p2):
+      r = 6371
+      distance =  2*r*math.asin(math.sqrt(math.sin(math.degrees((p2["lat"]-p1["lat"])/2))**2+(1-(math.degrees(math.sin((p2["lat"]-p1["lat"])/2)**2))-(math.degrees(math.sin((p2["lat"]+p1["lat"])/2)**2)))*(math.degrees(math.sin((p2["lng"]-p1["lng"])/2)**2))))
+      return distance
 def sendSMTP_mail(sender, password, receiver, message, email_use):
     context = ssl.create_default_context()
     with smtplib.SMTP("smtp.gmail.com", 587) as server:
@@ -265,12 +274,12 @@ def send_confirmation_of_email(reciever, password, sender_email, proxi_domain_ba
 def on_init():
   api.add_resource(Chats, '/api/chats/<int:chat_id>')
   api.add_resource(User, '/api/user/<int:user_id>')
-  api.add_resource(Location, '/api/process/location')
   api.add_resource(Messages, '/api/get-messages/<int:chat_id>')
   api.add_resource(VerifyUser, '/api/verify')
   api.add_resource(GetUserId, '/api/get-user-id')
   api.add_resource(GlobalVariables, '/api/variables')
   api.add_resource(RecentChats, '/api/recent/<int:user_id>')
+  api.add_resource(GetNearMe, '/api/get-chats-near-me')
 
   chat_table_params = [
       "chat_id INT AUTO_INCREMENT",
