@@ -1,22 +1,15 @@
-import re
 from flask import Flask
 from flask import request
 from flask import redirect
-from flask.wrappers import Response
 from flask_restful import Resource, Api
 from flask_cors import CORS
-from flask_socketio import (
-  SocketIO,
-  join_room,
-  leave_room
-)
+from flask_socketio import SocketIO, join_room, leave_room
 from webargs import fields
 from webargs.flaskparser import use_kwargs
-
-import smtplib, ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+import smtplib, ssl
 import sqldb 
 import json
 import random
@@ -26,7 +19,6 @@ import time
 with open("./globalVariables.json", "r") as f:
     gVar_total = json.load(f)
     gVar = gVar_total["flask_app_d"]
-
 
 app = Flask(__name__)
 api = Api(app)
@@ -54,8 +46,6 @@ with open('./register_verification.txt', 'r') as file:
 with open('./register_verification_html.txt', 'r') as file:
     reg_ver_html_file = file.read().replace('\n', '')
 
-print("\n\n\n\n\n********** PLEASE VERIFY THAT PROXI DOMAIN IS CHANGED WHEN WEBSITE PUBLISHED **********\n\n\n\n\n")
-
 #SOCKETIO
 @socketio.on('join')
 def on_join(data_jsonned):
@@ -75,6 +65,7 @@ def on_leave(data):
 @socketio.on('message')
 def on_new_message(data_json):
     data = json.loads(data_json)
+    print(data)
     new_message_id = sqldb.add_msg(
       data["chat_id"],
       data["content"],
@@ -129,7 +120,9 @@ class User(Resource):
         user_data = json.loads(request.data)
         try:
           if sqldb.get_user_is_existing(user_data["email"]):
-            return {"user_id": sqldb.get_user_though_email(user_data["email"]), "is_existing": True}
+            print("This user already exists: {}".format(user_data["email"]))
+            return json.dumps({"user_id": int(sqldb.get_user_though_email(user_data["email"])), "is_existing": True})
+          print("This user doesn't exist. Creating new")
           sqldb.add_user(
             user_data["firstName"],
             user_data["lastName"],
@@ -139,13 +132,12 @@ class User(Resource):
             user_data["profPicFilePath"],
             user_data["birthday"],
           )
-          time.sleep(100)
-          return_string = {"user_id":sqldb.get_user_though_email(user_data["email"]), "is_existing": False}
-          return json.dumps(return_string)
+          return_string = json.dumps({"user_id":sqldb.get_user_though_email(user_data["email"]), "is_existing": False})
+          print(return_string)
+          return return_string
         except Exception as err:
           print("Couldn't understand POST request to user:",err)
 
-    @use_kwargs({'email': fields.Str(missing='default_val')}, location="query")
     def get(self, user_id):
         try:
           sqldb.get_user(user_id)
@@ -176,18 +168,13 @@ class User(Resource):
           print("Couldn't delete user {}: {}".format(user_id, err))
 class Messages(Resource):
     @use_kwargs({'hwmny': fields.Str(missing='default_val')}, location="query")
-    def get(chat_id, hwmny):
-        print(hwmny)
+    def get(self, chat_id, hwmny):
         try:
-          temp_all = sqldb.get_msg_list_by_chat(chat_id)
-          print(temp_all)
-          #temp_return = []
-          #for i in range(hwmny):
-          #  print(temp_all[len(temp_all)-i])
-          #  temp_return.append(temp_all[len(temp_all)-i])
-          return temp_all#temp_return
-        except:
-          return {"messages":[{"content":"couldn't get messages", "user_id":1, "chat_id":1, "image":{"filename":"None", "content":"nonenoenoenoeneoneoenoenoeneoneneoineoneoneoneonenoene"}}]}
+          temp_all = {"messages":sqldb.get_msg_list_by_chat(chat_id)}
+          return json.dumps(temp_all, default=str)
+        except Exception as err:
+          print(err)
+          return json.dumps({"messages":[{"content":"couldn't get messages", "user_id":1, "chat_id":1, "image":{"filename":"None", "content":"nonenoenoenoeneoneoenoenoeneoneneoineoneoneoneonenoene"}}]})
 class Location(Resource):
     def get(self):
       points = json.loads(request.data)
@@ -220,28 +207,28 @@ class GetUserId(Resource):
   @use_kwargs({'email': fields.Str(missing='default_val')}, location="query")
   def get(self, email):
         try:
+          print(email+"ADSDASDADASDASD")
           return sqldb.get_user_though_email(email)
         except Exception as err:
           print("Couldn't get ID for user with email {}: {}".format(email, err))
 class GlobalVariables(Resource):
   @use_kwargs({'varname': fields.Str(missing='default_val')}, location="query")
-  def get(varname):
+  def get(self, varname):
     try:
       return {"variable":gVar[varname]}
     except:
       return {"variable": None}
 
   @use_kwargs({'varname': fields.Str(missing='default_val'), 'value': fields.Str(missing='default_val')}, location="query")
-  def post(varname, value):
+  def post(self, varname, value):
     try:
       gVar[varname] = value
     except:
       return {"success": False}
-
 class RecentChats(Resource):
-  def get(user_id):
+  def get(self, user_id):
     try:
-      return sqldb.return_recent_chats_ids(user_id)
+      return json.dumps(sqldb.return_recent_chats_ids(user_id))
     except Exception as err:
           print("Couldn't get recent chats: {}".format(err))
 
@@ -256,7 +243,6 @@ def sendSMTP_mail(sender, password, receiver, message, email_use):
             sender, receiver, message.as_string()
         )
     print("Send email to: {} {}".format(receiver, email_use))
-
 def send_confirmation_of_email(reciever, password, sender_email, proxi_domain_base, code):
     message = MIMEMultipart("alternative")
     message["Subject"] = "Verification Code"
@@ -276,7 +262,6 @@ def send_confirmation_of_email(reciever, password, sender_email, proxi_domain_ba
     message.attach(part2)
 
     sendSMTP_mail(sender_email, password, reciever, message, 'VERIFICATION EMAIL. CODE => {}'.format(code))
-
 def on_init():
   api.add_resource(Chats, '/api/chats/<int:chat_id>')
   api.add_resource(User, '/api/user/<int:user_id>')
@@ -334,15 +319,13 @@ def on_init():
     "user_id INT",
     "chat_id INT",
     "visited_on DATE",]
-
-  gVar['chatNumber'] = sqldb.get_rows_num('chats')
   
-  sqldb.drop_table("chats")
-  sqldb.drop_table("messages")
-  sqldb.drop_table("chat_usrs")
-  sqldb.drop_table("users")
-  sqldb.drop_table("users_email")
-  sqldb.drop_table("users_visited")
+  # sqldb.drop_table("chats")
+  # sqldb.drop_table("messages")
+  # sqldb.drop_table("chat_usrs")
+  # sqldb.drop_table("users")
+  # sqldb.drop_table("users_email")
+  # sqldb.drop_table("users_visited")
   
   sqldb.gen_table("chats", chat_table_params)
   sqldb.gen_table("messages", messages_table_params)
@@ -350,6 +333,8 @@ def on_init():
   sqldb.gen_table("users", usrs_table_params)
   sqldb.gen_table("users_email", usrs_email_table_params) 
   sqldb.gen_table("users_visited", usrs_visited_chat_params) 
+
+  gVar['chatNumber'] = sqldb.get_rows_num('chats')
 
 if __name__ == '__main__':
   on_init()

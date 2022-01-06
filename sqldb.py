@@ -85,17 +85,17 @@ def get_chat_list():
 
 def get_chat_d(chat_id):
     try:
-        dbcursor.execute("SELECT * FROM chats WHERE chat_id {}".format(chat_id))
+        dbcursor.execute("SELECT * FROM chats WHERE chat_id = {}".format(chat_id))
         result = dbcursor.fetchone()
         chat_json = {
             "chat_id":result[0],
-            "creator_id":result[2],
-            "name":result[3],
-            "description":result[4],
-            "image":result[6],
-            "created_on":result[7],
-            "loc_latitude":result[8],
-            "loc_longitude":result[9],
+            "creator_id":result[1],
+            "name":result[2],
+            "description":result[3],
+            "image":result[4],
+            "created_on":result[6].strftime('%m/%d/%Y'),
+            "loc_latitude":result[7],
+            "loc_longitude":result[8],
         }
         return chat_json
     except Exception as err:
@@ -104,7 +104,7 @@ def get_chat_d(chat_id):
 #MESSAGES
 def get_msg_by_msg_id(message_id):
     try:
-        dbcursor.execute("SELECT * FROM messages WHERE message_id {}".format(message_id))
+        dbcursor.execute("SELECT * FROM messages WHERE message_id = {}".format(message_id))
         result = dbcursor.fetchall()
         return result
     except Exception as err:
@@ -112,15 +112,26 @@ def get_msg_by_msg_id(message_id):
 
 def get_msg_list_by_chat(chat_id):
     try:
-        dbcursor.execute("SELECT * FROM messages WHERE chat_id {}".format(chat_id))
+        dbcursor.execute("SELECT * FROM messages WHERE chat_id = {}".format(chat_id))
         result = dbcursor.fetchall()
-        return result
+        processed_result = []
+        for i in range(len(result)-1):
+            dict_result = {
+                "messageId": result[i-1][0],
+                "senderId": result[i-1][1],
+                "chatId": result[i-1][2],
+                "content": result[i-1][3],
+                "sendOn": result[i-1][5].strftime('%m/%d/%Y %H:%M:%S'),
+                "imageB64": result[i-1][4]
+            }
+            processed_result.append(dict_result)
+        return processed_result
     except Exception as err:
         print("Couldn't get data: {}".format(err))
 
 def get_msg_list_by_user(user_id):
     try:
-        dbcursor.execute("SELECT * FROM messages WHERE user_id {}".format(user_id))
+        dbcursor.execute("SELECT * FROM messages WHERE user_id = {}".format(user_id))
         result = dbcursor.fetchall()
         return result
     except Exception as err:
@@ -156,7 +167,7 @@ def add_user(f_name, s_name, bio, email, pic_name, prof_pic, birthday):
 
 def get_user(user_id):
     try:
-        dbcursor.execute("SELECT * FROM users WHERE user_id {}".format(user_id))
+        dbcursor.execute("SELECT * FROM users WHERE user_id = {}".format(user_id))
         result = dbcursor.fetchone()
         user_json = {
             "user_id":result[0],
@@ -176,8 +187,8 @@ def get_user_is_existing(email):
     try:
         dbcursor.execute("SELECT count(*) FROM users WHERE email = '{}'".format(email))
         is_existing = False
-        if dbcursor.fetchone()[0]>0:
-            print(dbcursor.fetchone()[0])
+        temp = dbcursor.fetchone()[0]
+        if temp>0:
             is_existing=True
         return is_existing
     except Exception as err:
@@ -257,13 +268,13 @@ def add_visited_chat(user_id, chat_id):
 
 def return_recent_chats_ids(user_id):
     try:
-        sql = "SELECT chat_id FROM users_email WHERE user_id = '{}'".format(user_id)
+        sql = "SELECT * FROM users_visited WHERE user_id = {}".format(user_id)
         dbcursor.execute(sql)
         mydb.commit()
         myresult = dbcursor.fetchall()
         temp = []
         for i in myresult:
-            temp.append[myresult[i]]
-        return {"code":myresult}
+            temp.append[myresult[i][2]]
+        return {"ids":myresult}
     except Exception as err:
         print("Couldn't get recent chats: {}".format(err))
