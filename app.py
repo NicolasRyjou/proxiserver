@@ -4,6 +4,7 @@ from flask import redirect
 from flask_restful import Resource, Api
 from flask_cors import CORS
 from flask_socketio import SocketIO, join_room, leave_room
+from marshmallow.fields import Float
 from webargs import fields
 from webargs.flaskparser import use_kwargs
 from email.mime.text import MIMEText
@@ -39,6 +40,9 @@ app.config['SECRET_KEY'] = gVar["secret_key"]
 EMAIL_ADDRESS = 'noReplyProxi@gmail.com'
 EMAIL_PASSWORD = 'proxiNoReply'
 PROXI_DOMAIN = 'https://127.0.0.1:5000'
+
+#VAR
+EARTH_RADIUS = 6371000 #m
 
 #REGISTRATION EMAIL
 with open('./register_verification.txt', 'r') as file:
@@ -78,9 +82,8 @@ def on_new_message(data_json):
     socketio.emit('message', data, room=data['chat_id'])
 
 @socketio.on('delete_message')
-def on_new_message(data_json):
-    data = json.loads(data_json)
-    sqldb.del_msg(data["message_id"])
+def on_new_message(data):
+    sqldb.del_msg(data)
 
 class Chats(Resource):
     def post(self, chat_id):
@@ -170,8 +173,8 @@ class Messages(Resource):
     @use_kwargs({'hwmny': fields.Str(missing='default_val')}, location="query")
     def get(self, chat_id, hwmny):
         try:
-          '''json.dumps('''''', default=str)'''
-          temp_all = sqldb.get_msg_list_by_chat(chat_id)
+          temp_all = sqldb.get_msg_list_by_chat(int(chat_id))
+          print(temp_all)
           return temp_all
         except Exception as err:
           print(err)
@@ -220,26 +223,48 @@ class GlobalVariables(Resource):
 class RecentChats(Resource):
   def get(self, user_id):
     try:
-      return json.dumps(sqldb.return_recent_chats_ids(user_id))
+      return sqldb.return_recent_chats_ids(user_id)
     except Exception as err:
-          print("Couldn't get recent chats: {}".format(err))
+        print("Couldn't get recent chats: {}".format(err))
 class GetNearMe(Resource):
-    def get(self):
-      location_data = json.loads(request.data.decode('utf-8'))
-      print("LOCATION DATA: {}".format(location_data))
+    @use_kwargs({'lat': fields.Str(missing='default_val'),'lng': fields.Str(missing='default_val'),'radius': fields.Str(missing='default_val')}, location="query")
+    def get(self, lat, lng, radius):
       chat_list = sqldb.get_chat_list()
       return_list = []
-      max_dist = location_data["max_radius"]
-      p1 = {"lat":location_data["lat"], "lng":location_data["lng"]}
+      p1 = {"lat":float(lat), "lng":float(lng)}
       for i in range(len(chat_list)-1):
         p2 = {"lat":chat_list[i]["loc_latitude"], "lng":chat_list[i]["loc_longitude"]}
-        if get_distance_between(p1, p2)<max_dist:
+        print(float(radius))
+        print(float(get_distance_between(p1, p2))*1000)
+        if float(get_distance_between(p1, p2))*1000<float(radius):
           return_list.append(chat_list[i]["chat_id"])
       return return_list
 
 def get_distance_between(p1, p2):
-      r = 6371
-      distance =  2*r*math.asin(math.sqrt(math.sin(math.degrees((p2["lat"]-p1["lat"])/2))**2+(1-(math.degrees(math.sin((p2["lat"]-p1["lat"])/2)**2))-(math.degrees(math.sin((p2["lat"]+p1["lat"])/2)**2)))*(math.degrees(math.sin((p2["lng"]-p1["lng"])/2)**2))))
+      r = EARTH_RADIUS
+      distance =  2*r*math.asin(
+        math.sqrt(
+          math.sin(
+            math.degrees(
+              (p2["lat"]-p1["lat"])/2))**2+(1-(
+                math.degrees(math.sin((p2["lat"]-p1["lat"])/2)**2)
+                )
+                -
+                (
+                  math.degrees(
+                    math.sin(
+                      (p2["lat"]+p1["lat"])/2)**2)
+                      )
+                    )
+                    *
+                    (
+                      math.degrees(
+                        math.sin(
+                          (p2["lng"]-p1["lng"])/2)**2
+                          )
+                        )
+                    )
+        )
       return distance
 def sendSMTP_mail(sender, password, receiver, message, email_use):
     context = ssl.create_default_context()
@@ -329,12 +354,12 @@ def on_init():
     "chat_id INT",
     "visited_on DATE",]
   
-  # sqldb.drop_table("chats")
-  # sqldb.drop_table("messages")
-  # sqldb.drop_table("chat_usrs")
-  # sqldb.drop_table("users")
-  # sqldb.drop_table("users_email")
-  # sqldb.drop_table("users_visited")
+  sqldb.drop_table("chats")
+  sqldb.drop_table("messages")
+  sqldb.drop_table("chat_usrs")
+  sqldb.drop_table("users")
+  sqldb.drop_table("users_email")
+  sqldb.drop_table("users_visited")
   
   sqldb.gen_table("chats", chat_table_params)
   sqldb.gen_table("messages", messages_table_params)
@@ -344,6 +369,7 @@ def on_init():
   sqldb.gen_table("users_visited", usrs_visited_chat_params) 
 
   gVar['chatNumber'] = sqldb.get_rows_num('chats')
+
 
 if __name__ == '__main__':
   on_init()
