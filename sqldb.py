@@ -48,10 +48,10 @@ def get_rows_num(table):
     res = dbcursor.fetchone()
     return res[0]
 
-def add_chat(name, location, creator_id, description, image_name=None, image=None):
+def add_chat(name, location, creator_id, description, radius, image_name=None, image=None):
     try:
-        sql = "INSERT INTO chats (name, creator_id, description, image_name, image, created_on, loc_latitude, loc_longitude) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
-        val = (name, int(creator_id), str(description), image_name, image, datetime.datetime.now(), location["lat"], location["lng"])
+        sql = "INSERT INTO chats (name, creator_id, description, image_name, image, created_on, loc_latitude, loc_longitude, radius) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        val = (name, int(creator_id), str(description), image_name, image, datetime.datetime.now(), location["lat"], location["lng"], radius)
         dbcursor.execute(sql, val)
         mydb.commit()
     except Exception as err:
@@ -89,6 +89,7 @@ def get_chat_list():
                 "created_on":result[i][6].strftime('%m/%d/%Y'),
                 "loc_latitude":result[i][7],
                 "loc_longitude":result[i][8],
+                "radius":result[i][9]
             }
             return_dict.append(chat_json)
         return return_dict
@@ -279,13 +280,13 @@ def add_visited_chat(user_id, chat_id):
 
 def return_recent_chats_ids(user_id):
     try:
-        sql = "SELECT DISTINCT user_id FROM users_visited WHERE user_id = {}".format(user_id)
+        sql = "SELECT DISTINCT chat_id FROM users_visited WHERE user_id = {}".format(user_id)
         dbcursor.execute(sql)
         mydb.commit()
         myresult = dbcursor.fetchall()
         temp = []
-        for i in range(len(myresult)-1):
-            temp.append(myresult[i][2])
+        for i in range(len(myresult)):
+            temp.append(myresult[i][0])
         return {"ids":temp}
     except Exception as err:
         print("Couldn't get recent chats: {}".format(err))

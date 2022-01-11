@@ -11,6 +11,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 import smtplib, ssl
+
+from werkzeug import datastructures
 import sqldb 
 import json
 import random
@@ -42,7 +44,7 @@ EMAIL_PASSWORD = 'proxiNoReply'
 PROXI_DOMAIN = 'https://127.0.0.1:5000'
 
 #VAR
-EARTH_RADIUS = 6371000 #m
+EARTH_RADIUS = 6371 #m
 
 #REGISTRATION EMAIL
 with open('./register_verification.txt', 'r') as file:
@@ -85,12 +87,124 @@ def on_new_message(data_json):
 def on_new_message(data):
     sqldb.del_msg(data)
 
+
+def get_distance_between(p1, p2):
+      r = EARTH_RADIUS
+      lon1, lat1, lon2, lat2 = map(math.radians, [p1["lat"], p1["lng"], p2["lat"], p2["lng"]])
+      distance =  2*r*math.asin(math.sqrt(math.sin((lat2-lat1)/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin((lon2-lon1)/2)**2))
+      return distance
+def sendSMTP_mail(sender, password, receiver, message, email_use):
+    context = ssl.create_default_context()
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.ehlo()
+        server.starttls(context=context)
+        server.ehlo()
+        server.login(sender, password)
+        server.sendmail(
+            sender, receiver, message.as_string()
+        )
+    print("Send email to: {} {}".format(receiver, email_use))
+def send_confirmation_of_email(reciever, password, sender_email, proxi_domain_base, code):
+    message = MIMEMultipart("alternative")
+    message["Subject"] = "Verification Code"
+    message["From"] = sender_email
+    message["To"] = reciever
+
+    proxiHelpLink = proxi_domain_base + '/help'
+    proxiCodeLink = proxi_domain_base + '/api/verify?email={}&code={}&origin={}'.format(reciever, code, "email")
+
+    text_rendered = reg_ver_txt_file.format(proxiCodeLink, code, proxiHelpLink)
+    html_rendered = reg_ver_html_file.format(proxiCodeLink, code, proxiHelpLink)
+
+    part1 = MIMEText(text_rendered, "plain")
+    part2 = MIMEText(html_rendered, "html")
+
+    message.attach(part1)
+    message.attach(part2)
+
+    sendSMTP_mail(sender_email, password, reciever, message, 'VERIFICATION EMAIL. CODE => {}'.format(code))
+def on_init():
+  api.add_resource(Chats, '/api/chats/<int:chat_id>')
+  api.add_resource(User, '/api/user/<int:user_id>')
+  api.add_resource(Messages, '/api/get-messages/<int:chat_id>')
+  api.add_resource(VerifyUser, '/api/verify')
+  api.add_resource(GetUserId, '/api/get-user-id')
+  api.add_resource(GlobalVariables, '/api/variables')
+  api.add_resource(RecentChats, '/api/recent/<int:user_id>')
+  api.add_resource(GetNearMe, '/api/get-chats-near-me')
+
+  chat_table_params = [
+      "chat_id INT AUTO_INCREMENT",
+      "PRIMARY KEY (chat_id)",
+      "creator_id INT",
+      "name TEXT", 
+      "description TEXT", 
+      "image_name TEXT",
+      "image BLOB",
+      "created_on DATETIME",
+      "loc_latitude FLOAT",
+      "loc_longitude FLOAT",
+      "radius FLOAT"]
+  messages_table_params = [
+      "message_id INT AUTO_INCREMENT",
+      "PRIMARY KEY (message_id)",
+      "sender_id INT",
+      "chat_id INT",
+      "message TEXT", 
+      "image BLOB",
+      "send_on DATETIME"]
+  chat_users_params = [
+      "id INT AUTO_INCREMENT",
+      "PRIMARY KEY (id)",
+      "chat_id INT",
+      "user_id INT"]
+  usrs_table_params = [
+      "user_id INT AUTO_INCREMENT",
+      "PRIMARY KEY (user_id)",
+      "f_name TEXT", 
+      "s_name TEXT", 
+      "bio TEXT", 
+      "email TEXT",
+      "prof_pic_filename TEXT",
+      "prof_pic BLOB",
+      "birthday DATE",
+      "created_on DATE"]
+  usrs_email_table_params = [
+    "id INT AUTO_INCREMENT",
+    "PRIMARY KEY (id)",
+    "email TEXT",
+    "confirmation_code INT",
+    "confirmed_email BOOLEAN"]
+  usrs_visited_chat_params = [
+    "id INT AUTO_INCREMENT",
+    "PRIMARY KEY (id)",
+    "user_id INT",
+    "chat_id INT",
+    "visited_on DATE",]
+  
+  # sqldb.drop_table("chats")
+  # sqldb.drop_table("messages")
+  # sqldb.drop_table("chat_usrs")
+  # sqldb.drop_table("users")
+  # sqldb.drop_table("users_email")
+  # sqldb.drop_table("users_visited")
+  
+  sqldb.gen_table("chats", chat_table_params)
+  sqldb.gen_table("messages", messages_table_params)
+  sqldb.gen_table("chat_usrs", chat_users_params)
+  sqldb.gen_table("users", usrs_table_params)
+  sqldb.gen_table("users_email", usrs_email_table_params) 
+  sqldb.gen_table("users_visited", usrs_visited_chat_params) 
+
+  gVar['chatNumber'] = sqldb.get_rows_num('chats')
+
+
 class Chats(Resource):
     def post(self, chat_id):
         chat_json = request.data
         chat_data=json.loads(chat_json)
         try:
-          sqldb.add_chat(chat_data["chatName"], chat_data["coordinates"] ,chat_data["creatorId"], chat_data["description"])
+          sqldb.add_chat(chat_data["chatName"], chat_data["coordinates"] ,chat_data["creatorId"], chat_data["description"], chat_data["radius"])
           return {"success": True}
         except Exception as err:
           print("Couldn't understand POST request to chat:",err)
@@ -193,8 +307,8 @@ class VerifyUser(Resource):
           print(code, "CORRECT CODE", ver_code)
           return "Wrong code, please try again"
 
-    @use_kwargs({'email': fields.Str(missing='default_val')}, location="query")
-    def post(self, email):
+    def post(self):
+      email = request.data["email"]
       random_code_temp = random.randint(100000, 999999)
       sqldb.create_new_confirmation_code(email, random_code_temp)
       send_confirmation_of_email(email, EMAIL_PASSWORD, EMAIL_ADDRESS, PROXI_DOMAIN, random_code_temp)  
@@ -223,7 +337,12 @@ class GlobalVariables(Resource):
 class RecentChats(Resource):
   def get(self, user_id):
     try:
-      return sqldb.return_recent_chats_ids(user_id)
+      list_of_id = sqldb.return_recent_chats_ids(user_id)
+      return_list = []
+      for i in range(len(list_of_id["ids"])):
+        data = sqldb.get_chat_d(list_of_id["ids"][i])
+        return_list.append(data)
+      return {'ids':return_list}
     except Exception as err:
         print("Couldn't get recent chats: {}".format(err))
 class GetNearMe(Resource):
@@ -232,143 +351,15 @@ class GetNearMe(Resource):
       chat_list = sqldb.get_chat_list()
       return_list = []
       p1 = {"lat":float(lat), "lng":float(lng)}
-      for i in range(len(chat_list)-1):
+      for i in range(len(chat_list)):
         p2 = {"lat":chat_list[i]["loc_latitude"], "lng":chat_list[i]["loc_longitude"]}
-        print(float(radius))
-        print(float(get_distance_between(p1, p2))*1000)
+        print(float(get_distance_between(p1, p2)))
+        is_in_reach = False
         if float(get_distance_between(p1, p2))*1000<float(radius):
-          return_list.append(chat_list[i]["chat_id"])
+          return_list.append(chat_list[i])
+          is_in_reach = True
+        print("Point 1: {};\nPoint 2: {};\nDistance between: {};\nIs in reach: {};\n".format(json.dumps(p1), json.dumps(p2), get_distance_between(p1, p2), is_in_reach))
       return return_list
-
-def get_distance_between(p1, p2):
-      r = EARTH_RADIUS
-      distance =  2*r*math.asin(
-        math.sqrt(
-          math.sin(
-            math.degrees(
-              (p2["lat"]-p1["lat"])/2))**2+(1-(
-                math.degrees(math.sin((p2["lat"]-p1["lat"])/2)**2)
-                )
-                -
-                (
-                  math.degrees(
-                    math.sin(
-                      (p2["lat"]+p1["lat"])/2)**2)
-                      )
-                    )
-                    *
-                    (
-                      math.degrees(
-                        math.sin(
-                          (p2["lng"]-p1["lng"])/2)**2
-                          )
-                        )
-                    )
-        )
-      return distance
-def sendSMTP_mail(sender, password, receiver, message, email_use):
-    context = ssl.create_default_context()
-    with smtplib.SMTP("smtp.gmail.com", 587) as server:
-        server.ehlo()
-        server.starttls(context=context)
-        server.ehlo()
-        server.login(sender, password)
-        server.sendmail(
-            sender, receiver, message.as_string()
-        )
-    print("Send email to: {} {}".format(receiver, email_use))
-def send_confirmation_of_email(reciever, password, sender_email, proxi_domain_base, code):
-    message = MIMEMultipart("alternative")
-    message["Subject"] = "Verification Code"
-    message["From"] = sender_email
-    message["To"] = reciever
-
-    proxiHelpLink = proxi_domain_base + '/help'
-    proxiCodeLink = proxi_domain_base + '/api/verify?email={}&code={}&origin={}'.format(reciever, code, "email")
-
-    text_rendered = reg_ver_txt_file.format(proxiCodeLink, code, proxiHelpLink)
-    html_rendered = reg_ver_html_file.format(proxiCodeLink, code, proxiHelpLink)
-
-    part1 = MIMEText(text_rendered, "plain")
-    part2 = MIMEText(html_rendered, "html")
-
-    message.attach(part1)
-    message.attach(part2)
-
-    sendSMTP_mail(sender_email, password, reciever, message, 'VERIFICATION EMAIL. CODE => {}'.format(code))
-def on_init():
-  api.add_resource(Chats, '/api/chats/<int:chat_id>')
-  api.add_resource(User, '/api/user/<int:user_id>')
-  api.add_resource(Messages, '/api/get-messages/<int:chat_id>')
-  api.add_resource(VerifyUser, '/api/verify')
-  api.add_resource(GetUserId, '/api/get-user-id')
-  api.add_resource(GlobalVariables, '/api/variables')
-  api.add_resource(RecentChats, '/api/recent/<int:user_id>')
-  api.add_resource(GetNearMe, '/api/get-chats-near-me')
-
-  chat_table_params = [
-      "chat_id INT AUTO_INCREMENT",
-      "PRIMARY KEY (chat_id)",
-      "creator_id INT",
-      "name TEXT", 
-      "description TEXT", 
-      "image_name TEXT",
-      "image BLOB",
-      "created_on DATETIME",
-      "loc_latitude FLOAT",
-      "loc_longitude FLOAT"]
-  messages_table_params = [
-      "message_id INT AUTO_INCREMENT",
-      "PRIMARY KEY (message_id)",
-      "sender_id INT",
-      "chat_id INT",
-      "message TEXT", 
-      "image BLOB",
-      "send_on DATETIME"]
-  chat_users_params = [
-      "id INT AUTO_INCREMENT",
-      "PRIMARY KEY (id)",
-      "chat_id INT",
-      "user_id INT"]
-  usrs_table_params = [
-      "user_id INT AUTO_INCREMENT",
-      "PRIMARY KEY (user_id)",
-      "f_name TEXT", 
-      "s_name TEXT", 
-      "bio TEXT", 
-      "email TEXT",
-      "prof_pic_filename TEXT",
-      "prof_pic BLOB",
-      "birthday DATE",
-      "created_on DATE"]
-  usrs_email_table_params = [
-    "id INT AUTO_INCREMENT",
-    "PRIMARY KEY (id)",
-    "email TEXT",
-    "confirmation_code INT",
-    "confirmed_email BOOLEAN"]
-  usrs_visited_chat_params = [
-    "id INT AUTO_INCREMENT",
-    "PRIMARY KEY (id)",
-    "user_id INT",
-    "chat_id INT",
-    "visited_on DATE",]
-  
-  sqldb.drop_table("chats")
-  sqldb.drop_table("messages")
-  sqldb.drop_table("chat_usrs")
-  sqldb.drop_table("users")
-  sqldb.drop_table("users_email")
-  sqldb.drop_table("users_visited")
-  
-  sqldb.gen_table("chats", chat_table_params)
-  sqldb.gen_table("messages", messages_table_params)
-  sqldb.gen_table("chat_usrs", chat_users_params)
-  sqldb.gen_table("users", usrs_table_params)
-  sqldb.gen_table("users_email", usrs_email_table_params) 
-  sqldb.gen_table("users_visited", usrs_visited_chat_params) 
-
-  gVar['chatNumber'] = sqldb.get_rows_num('chats')
 
 
 if __name__ == '__main__':
