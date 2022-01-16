@@ -1,3 +1,4 @@
+from datetime import datetime
 from flask import Flask
 from flask import request
 from flask import redirect
@@ -123,6 +124,11 @@ def send_confirmation_of_email(reciever, password, sender_email, proxi_domain_ba
     message.attach(part2)
 
     sendSMTP_mail(sender_email, password, reciever, message, 'VERIFICATION EMAIL. CODE => {}'.format(code))
+def sendEmailFunc(email: str):
+      random_code_temp = random.randint(100000, 999999)
+      sqldb.create_new_confirmation_code(email, random_code_temp)
+      send_confirmation_of_email(email, EMAIL_PASSWORD, EMAIL_ADDRESS, PROXI_DOMAIN, random_code_temp) 
+
 def on_init():
   api.add_resource(Chats, '/api/chats/<int:chat_id>')
   api.add_resource(User, '/api/user/<int:user_id>')
@@ -131,7 +137,9 @@ def on_init():
   api.add_resource(GetUserId, '/api/get-user-id')
   api.add_resource(GlobalVariables, '/api/variables')
   api.add_resource(RecentChats, '/api/recent/<int:user_id>')
+  api.add_resource(IsUserVerified, '/api/is-verified/<int:user_id>')
   api.add_resource(GetNearMe, '/api/get-chats-near-me')
+  api.add_resource(checkVerificationCode, '/api/check-if-correct-code')
 
   chat_table_params = [
       "chat_id INT AUTO_INCREMENT",
@@ -141,7 +149,7 @@ def on_init():
       "description TEXT", 
       "image_name TEXT",
       "image BLOB",
-      "created_on DATETIME",
+      "created_on TEXT",
       "loc_latitude FLOAT",
       "loc_longitude FLOAT",
       "radius FLOAT"]
@@ -152,7 +160,7 @@ def on_init():
       "chat_id INT",
       "message TEXT", 
       "image BLOB",
-      "send_on DATETIME"]
+      "send_on TEXT"]
   chat_users_params = [
       "id INT AUTO_INCREMENT",
       "PRIMARY KEY (id)",
@@ -167,8 +175,8 @@ def on_init():
       "email TEXT",
       "prof_pic_filename TEXT",
       "prof_pic BLOB",
-      "birthday DATE",
-      "created_on DATE"]
+      "birthday TEXT",
+      "created_on TEXT"]
   usrs_email_table_params = [
     "id INT AUTO_INCREMENT",
     "PRIMARY KEY (id)",
@@ -180,7 +188,7 @@ def on_init():
     "PRIMARY KEY (id)",
     "user_id INT",
     "chat_id INT",
-    "visited_on DATE",]
+    "visited_on TEXT",]
   
   # sqldb.drop_table("chats")
   # sqldb.drop_table("messages")
@@ -240,6 +248,7 @@ class User(Resource):
             print("This user already exists: {}".format(user_data["email"]))
             return json.dumps({"user_id": int(sqldb.get_user_though_email(user_data["email"])), "is_existing": True})
           print("This user doesn't exist. Creating new")
+          print(user_data)
           sqldb.add_user(
             user_data["firstName"],
             user_data["lastName"],
@@ -247,8 +256,9 @@ class User(Resource):
             user_data["email"],
             user_data["profPicB64"],
             user_data["profPicFilePath"],
-            user_data["birthday"],
+            str(user_data["birthday"]),
           )
+          sendEmailFunc(user_data["email"])
           return_string = json.dumps({"user_id":sqldb.get_user_though_email(user_data["email"]), "is_existing": False})
           print(return_string)
           return return_string
@@ -273,7 +283,7 @@ class User(Resource):
             user_data["email"],
             user_data["prof_pic"]["filename"],
             user_data["prof_pic"]["content"],
-            user_data["birthday"], 
+            str(user_data["birthday"]), 
           )
         except Exception as err:
           print("Couldn't update data for user {}: {}".format(user_id, err))
@@ -307,16 +317,10 @@ class VerifyUser(Resource):
           print(code, "CORRECT CODE", ver_code)
           return "Wrong code, please try again"
 
-    def post(self):
-      email = request.data["email"]
-      random_code_temp = random.randint(100000, 999999)
-      sqldb.create_new_confirmation_code(email, random_code_temp)
-      send_confirmation_of_email(email, EMAIL_PASSWORD, EMAIL_ADDRESS, PROXI_DOMAIN, random_code_temp)  
 class GetUserId(Resource):
   @use_kwargs({'email': fields.Str(missing='default_val')}, location="query")
   def get(self, email):
         try:
-          print(email+"ADSDASDADASDASD")
           return sqldb.get_user_though_email(email)
         except Exception as err:
           print("Couldn't get ID for user with email {}: {}".format(email, err))
@@ -360,8 +364,18 @@ class GetNearMe(Resource):
           is_in_reach = True
         print("Point 1: {};\nPoint 2: {};\nDistance between: {};\nIs in reach: {};\n".format(json.dumps(p1), json.dumps(p2), get_distance_between(p1, p2), is_in_reach))
       return return_list
-
-
+class IsUserVerified(Resource):
+  def get(self, user_id):
+    return sqldb.check_confirmation_code(sqldb.get_user(user_id)['email'])
+class checkVerificationCode(Resource):
+  @use_kwargs({'code': fields.Str(missing='default_val'), 'email': fields.Str(missing='default_val')}, location="query")
+  def get(self, code, email):
+    if(int(code) == int(sqldb.check_confirmation_code(email)['code'])):
+      sqldb.confirm_user(email, True)
+      time.sleep(0.1)
+      return {'validityOfCode':True}
+    if(int(code) != int(sqldb.check_confirmation_code(email)['code'])):
+      return {'validityOfCode':False}
 if __name__ == '__main__':
   on_init()
   app.run()

@@ -51,7 +51,7 @@ def get_rows_num(table):
 def add_chat(name, location, creator_id, description, radius, image_name=None, image=None):
     try:
         sql = "INSERT INTO chats (name, creator_id, description, image_name, image, created_on, loc_latitude, loc_longitude, radius) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
-        val = (name, int(creator_id), str(description), image_name, image, datetime.datetime.now(), location["lat"], location["lng"], radius)
+        val = (name, int(creator_id), str(description), image_name, image, str(datetime.datetime.now()), location["lat"], location["lng"], radius)
         dbcursor.execute(sql, val)
         mydb.commit()
     except Exception as err:
@@ -68,7 +68,7 @@ def edit_chat(chat_id, name, creator_id, location, image_name, image, descriptio
 
 def del_chat(chat_id):
     try:
-        sql = "DELETE * FROM chats WHERE chat_id = {}".format(chat_id)
+        sql = "DELETE FROM chats WHERE chat_id = {}".format(chat_id)
         dbcursor.execute(sql)
         mydb.commit()
     except Exception as err:
@@ -95,6 +95,7 @@ def get_chat_list():
         return return_dict
     except Exception as err:
         print("Couldn't get data for chats: {}".format(err))
+        
 def get_chat_d(chat_id):
     try:
         dbcursor.execute("SELECT * FROM chats WHERE chat_id = {}".format(chat_id))
@@ -152,7 +153,7 @@ def get_msg_list_by_user(user_id):
 def add_msg(chat_id, msg, sender_id, img=None):
     try:
         sql = "INSERT INTO messages (chat_id, message, image, send_on, sender_id) VALUES (%s, %s, %s, %s, %s)"
-        val = (chat_id, str(msg), img, datetime.datetime.now(), sender_id)
+        val = (chat_id, str(msg), img, str(datetime.datetime.now()), sender_id)
         dbcursor.execute(sql, val)
         mydb.commit()
     except Exception as err:
@@ -160,7 +161,7 @@ def add_msg(chat_id, msg, sender_id, img=None):
 
 def del_msg(msg_id):
     try:
-        sql = "DELETE * FROM messages WHERE message_id = {}".format(msg_id)
+        sql = "DELETE FROM messages WHERE message_id = {}".format(msg_id)
         dbcursor.execute(sql)
         mydb.commit()
     except Exception as err:
@@ -171,7 +172,7 @@ def del_msg(msg_id):
 def add_user(f_name, s_name, bio, email, pic_name, prof_pic, birthday):
     try:
         sql = "INSERT INTO users (f_name, s_name, bio, email, prof_pic_filename, prof_pic, birthday, created_on) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
-        val = (f_name, s_name, bio, email, pic_name, prof_pic, birthday, datetime.datetime.now())
+        val = (f_name, s_name, bio, email, pic_name, prof_pic, birthday, str(datetime.datetime.now()))
         dbcursor.execute(sql, val)
         mydb.commit()
     except Exception as err:
@@ -216,7 +217,7 @@ def get_user_though_email(email):
 
 def del_user(user_id):
     try:
-        sql = "DELETE * FROM users WHERE user_id = {}".format(user_id)
+        sql = "DELETE FROM users WHERE user_id = {}".format(user_id)
         dbcursor.execute(sql)
         mydb.commit()
     except Exception as err:
@@ -241,7 +242,7 @@ def confirm_user(email, is_confirmed):
     elif not is_confirmed:
         temp = 0
     try:
-        sql = "UPDATE users_email SET (confirmed_email) VALUES ({}) where email = '{}'".format(temp,email)
+        sql = "UPDATE users_email SET confirmed_email = {} where email = '{}'".format(temp,email)
         val = (email)
         dbcursor.execute(sql, val)
         mydb.commit()
@@ -265,14 +266,24 @@ def check_confirmation_code(email):
         dbcursor.execute(sql)
         mydb.commit()
         myresult = dbcursor.fetchone()
-        return {"code":myresult}
+        return {"code":myresult[0]}
     except Exception as err:
         print("Couldn't get confirmation code: {}".format(err))
+
+def check_is_user_valid(email):
+    try:
+        sql = "SELECT confirmed_email FROM users_email WHERE email = '{}'".format(email)
+        dbcursor.execute(sql)
+        mydb.commit()
+        myresult = dbcursor.fetchone()
+        return {"isValid":bool(myresult)}
+    except Exception as err:
+        print("Couldn't get confirmation code: {}".format(err)) 
 
 def add_visited_chat(user_id, chat_id):
     try:
         sql = "INSERT INTO users_visited (chat_id, user_id, visited_on) VALUES (%s, %s, %s)"
-        val = (chat_id, user_id, datetime.datetime.now())
+        val = (chat_id, user_id, str(datetime.datetime.now()))
         dbcursor.execute(sql, val)
         mydb.commit()
     except Exception as err:
