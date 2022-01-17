@@ -72,7 +72,6 @@ def on_leave(data):
 @socketio.on('message')
 def on_new_message(data_json):
     data = json.loads(data_json)
-    print(data)
     new_message_id = sqldb.add_msg(
       data["chat_id"],
       data["content"],
@@ -80,7 +79,6 @@ def on_new_message(data_json):
       data["image"]["content"]
     )
     new_data = sqldb.get_msg_by_msg_id(new_message_id)
-    print(new_data)
     print(">>> Recieved message from {} on chat {}. CONTENT: {}".format(data["user_id"],data["chat_id"],data["content"]))
     socketio.emit('message', data, room=data['chat_id'])
 
@@ -134,7 +132,7 @@ def on_init():
   api.add_resource(User, '/api/user/<int:user_id>')
   api.add_resource(Messages, '/api/get-messages/<int:chat_id>')
   api.add_resource(VerifyUser, '/api/verify')
-  api.add_resource(GetUserId, '/api/get-user-id')
+  api.add_resource(GetUserIdThoughEmail, '/api/get-user')
   api.add_resource(GlobalVariables, '/api/variables')
   api.add_resource(RecentChats, '/api/recent/<int:user_id>')
   api.add_resource(IsUserVerified, '/api/is-verified/<int:user_id>')
@@ -189,7 +187,8 @@ def on_init():
     "user_id INT",
     "chat_id INT",
     "visited_on TEXT",]
-  
+  usrs_passwords = []
+
   # sqldb.drop_table("chats")
   # sqldb.drop_table("messages")
   # sqldb.drop_table("chat_usrs")
@@ -205,7 +204,6 @@ def on_init():
   sqldb.gen_table("users_visited", usrs_visited_chat_params) 
 
   gVar['chatNumber'] = sqldb.get_rows_num('chats')
-
 
 class Chats(Resource):
     def post(self, chat_id):
@@ -246,9 +244,8 @@ class User(Resource):
         try:
           if sqldb.get_user_is_existing(user_data["email"]):
             print("This user already exists: {}".format(user_data["email"]))
-            return json.dumps({"user_id": int(sqldb.get_user_though_email(user_data["email"])), "is_existing": True})
+            return json.dumps({"user_id": int(sqldb.get_user_id_though_email(user_data["email"])), "is_existing": True})
           print("This user doesn't exist. Creating new")
-          print(user_data)
           sqldb.add_user(
             user_data["firstName"],
             user_data["lastName"],
@@ -259,15 +256,14 @@ class User(Resource):
             str(user_data["birthday"]),
           )
           sendEmailFunc(user_data["email"])
-          return_string = json.dumps({"user_id":sqldb.get_user_though_email(user_data["email"]), "is_existing": False})
-          print(return_string)
+          return_string = json.dumps({"user_id":sqldb.get_user_id_though_email(user_data["email"]), "is_existing": False})
           return return_string
         except Exception as err:
           print("Couldn't understand POST request to user:",err)
 
     def get(self, user_id):
         try:
-          sqldb.get_user(user_id)
+          return sqldb.get_user(user_id)
         except Exception as err:
           print("Couldn't get data for user {}: {}".format(user_id, err))
 
@@ -277,16 +273,18 @@ class User(Resource):
         try:
           sqldb.edit_user(
             user_id,
-            user_data["f_name"],
-            user_data["s_name"],
-            user_data["about_me"],
+            user_data["firstName"],
+            user_data["lastName"],
+            user_data["bio"],
             user_data["email"],
-            user_data["prof_pic"]["filename"],
-            user_data["prof_pic"]["content"],
+            user_data["profPicB64"],
+            user_data["profPicFilePath"],
             str(user_data["birthday"]), 
           )
+          return {'success':True}
         except Exception as err:
           print("Couldn't update data for user {}: {}".format(user_id, err))
+          return {'success':False}
 
     def delete(self, user_id):
         try:
@@ -298,7 +296,6 @@ class Messages(Resource):
     def get(self, chat_id, hwmny):
         try:
           temp_all = sqldb.get_msg_list_by_chat(int(chat_id))
-          print(temp_all)
           return temp_all
         except Exception as err:
           print(err)
@@ -314,14 +311,14 @@ class VerifyUser(Resource):
           if origin == "angular":
             return {"isCodeValid":True}
         elif code != ver_code:
-          print(code, "CORRECT CODE", ver_code)
           return "Wrong code, please try again"
-
-class GetUserId(Resource):
+class GetUserIdThoughEmail(Resource):
   @use_kwargs({'email': fields.Str(missing='default_val')}, location="query")
   def get(self, email):
         try:
-          return sqldb.get_user_though_email(email)
+          user_id = sqldb.get_user_id_though_email(email)
+          return_data = sqldb.get_user(user_id)
+          return return_data
         except Exception as err:
           print("Couldn't get ID for user with email {}: {}".format(email, err))
 class GlobalVariables(Resource):
@@ -350,23 +347,19 @@ class RecentChats(Resource):
     except Exception as err:
         print("Couldn't get recent chats: {}".format(err))
 class GetNearMe(Resource):
-    @use_kwargs({'lat': fields.Str(missing='default_val'),'lng': fields.Str(missing='default_val'),'radius': fields.Str(missing='default_val')}, location="query")
-    def get(self, lat, lng, radius):
+    @use_kwargs({'lat': fields.Str(missing='default_val'),'lng': fields.Str(missing='default_val')}, location="query")
+    def get(self, lat, lng):
       chat_list = sqldb.get_chat_list()
       return_list = []
       p1 = {"lat":float(lat), "lng":float(lng)}
       for i in range(len(chat_list)):
         p2 = {"lat":chat_list[i]["loc_latitude"], "lng":chat_list[i]["loc_longitude"]}
-        print(float(get_distance_between(p1, p2)))
-        is_in_reach = False
-        if float(get_distance_between(p1, p2))*1000<float(radius):
+        if float(get_distance_between(p1, p2))*1000<float(chat_list[i]["radius"]):
           return_list.append(chat_list[i])
-          is_in_reach = True
-        print("Point 1: {};\nPoint 2: {};\nDistance between: {};\nIs in reach: {};\n".format(json.dumps(p1), json.dumps(p2), get_distance_between(p1, p2), is_in_reach))
       return return_list
 class IsUserVerified(Resource):
   def get(self, user_id):
-    return sqldb.check_confirmation_code(sqldb.get_user(user_id)['email'])
+    return sqldb.check_is_user_valid(sqldb.get_user(user_id)['email'])
 class checkVerificationCode(Resource):
   @use_kwargs({'code': fields.Str(missing='default_val'), 'email': fields.Str(missing='default_val')}, location="query")
   def get(self, code, email):
@@ -376,6 +369,7 @@ class checkVerificationCode(Resource):
       return {'validityOfCode':True}
     if(int(code) != int(sqldb.check_confirmation_code(email)['code'])):
       return {'validityOfCode':False}
+
 if __name__ == '__main__':
   on_init()
   app.run()

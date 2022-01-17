@@ -1,3 +1,4 @@
+from unicodedata import ucd_3_2_0
 import mysql.connector
 import json
 import datetime
@@ -85,7 +86,7 @@ def get_chat_list():
                 "creator_id":result[i][1],
                 "name":result[i][2],
                 "description":result[i][3],
-                "image":result[i][4],
+                "image":str(result[i][4]),
                 "created_on":result[i][6].strftime('%m/%d/%Y'),
                 "loc_latitude":result[i][7],
                 "loc_longitude":result[i][8],
@@ -105,7 +106,7 @@ def get_chat_d(chat_id):
             "creator_id":result[1],
             "name":result[2],
             "description":result[3],
-            "image":result[4],
+            "image":str(result[4]),
             "created_on":result[6].strftime('%m/%d/%Y'),
             "loc_latitude":result[7],
             "loc_longitude":result[8],
@@ -188,9 +189,10 @@ def get_user(user_id):
             "s_name":result[2],
             "description":result[3],
             "email":result[4],
-            "prof_pic":result[5],
-            "birthday":result[6],
-            "created_on":result[7],
+            "prof_pic":str(result[5]),
+            "prof_pic_filename":str(result[6]),
+            "birthday":str(result[7]),
+            "created_on":str(result[8]),
         }
         return user_json
     except Exception as err:
@@ -207,13 +209,16 @@ def get_user_is_existing(email):
     except Exception as err:
         print("Couldn't get data wheather user is existing or not: {}".format(err))
 
-def get_user_though_email(email):
+def get_user_id_though_email(email):
     try:
-        dbcursor.execute("SELECT * FROM users WHERE email = '{}'".format(str(email)))  
-        result = dbcursor.fetchone()  
-        return result[0]
+        sql = "SELECT user_id FROM users WHERE email = '{}'".format(email)
+        dbcursor.execute(sql)
+        mydb.commit()
+        myresult = dbcursor.fetchone()
+        return myresult[0]
     except Exception as err:
-        print("Couldn't get data: {}".format(err))
+        print("Couldn't get confirmation code: {}".format(err)) 
+
 
 def del_user(user_id):
     try:
@@ -225,26 +230,30 @@ def del_user(user_id):
 
 def edit_user(user_id, f_name, s_name, bio, email, filename, prof_pic, birthday):
     try:
+        dbcursor.execute('SELECT email FROM users WHERE user_id = "{}"'.format(user_id))
+        mydb.commit()
+        emailIsNew = dbcursor.fetchone()
         sql = "UPDATE users SET (f_name, s_name, bio, email, prof_pic_filename, prof_pic, birthday) VALUES (%s, %s, %s, %s, %s, %s, %s) where user_id = {}".format(user_id)
         val = (f_name, s_name, str(bio), str(email), filename, prof_pic, str(birthday))
         dbcursor.execute(sql, val)
         mydb.commit()
-        sql = "UPDATE users_email SET (email, confirmed_email) VALUES (%s, %s) where email = {}".format(email)
-        val = (email, 0)
-        dbcursor.execute(sql, val)
-        mydb.commit()
+        if(emailIsNew):
+            sql = "UPDATE users_email SET (email, confirmed_email) VALUES (%s, %s) where email = {}".format(email)
+            val = (email, 0)
+            dbcursor.execute(sql, val)
+            mydb.commit()
     except Exception as err:
         print("Couldn't edit user: {}".format(err))
 
 def confirm_user(email, is_confirmed):
+    temp = 0
     if is_confirmed:
         temp = 1
     elif not is_confirmed:
         temp = 0
     try:
         sql = "UPDATE users_email SET confirmed_email = {} where email = '{}'".format(temp,email)
-        val = (email)
-        dbcursor.execute(sql, val)
+        dbcursor.execute(sql)
         mydb.commit()
     except Exception as err:
         print("Couldn't update confirmation of email: {}".format(err))
