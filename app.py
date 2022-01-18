@@ -173,6 +173,7 @@ def on_init():
       "s_name TEXT", 
       "bio TEXT", 
       "email TEXT",
+      "UNIQUE KEY unique (email)",
       "prof_pic_filename TEXT",
       "prof_pic BLOB",
       "birthday TEXT",
