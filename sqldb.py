@@ -1,3 +1,4 @@
+import re
 from unicodedata import ucd_3_2_0
 import mysql.connector
 import json
@@ -58,14 +59,16 @@ def add_chat(name, location, creator_id, description, radius, image_name=None, i
     except Exception as err:
         print("Couldn't create chat: {}".format(err))
 
-def edit_chat(chat_id, name, creator_id, location, image_name, image, description):
+def edit_chat(chat_id, name, location, description, radius, image_name=None, image=None):
     try:
-        sql = "UPDATE chats SET (name, creator_id, description, image_name, image, loc_latitude, loc_longitude) VALUES (%s, %s, %s, %s, %s, %s, %s) where chat_id = {}".format(chat_id)
-        val = (name, int(creator_id), str(description), image_name, image, location["lat"], location["lng"])
+        sql = "UPDATE chats SET name=%s, description=%s, image_name=%s, image=%s, loc_latitude=%s, loc_longitude=%s, radius=%s where chat_id = {}".format(chat_id)
+        val = (name, str(description), image_name, image, location["lat"], location["lng"], radius)
         dbcursor.execute(sql, val)
         mydb.commit()
+        return True
     except Exception as err:
         print("Couldn't edit chat: {}".format(err))
+        return False
 
 def del_chat(chat_id):
     try:
@@ -87,7 +90,7 @@ def get_chat_list():
                 "name":result[i][2],
                 "description":result[i][3],
                 "image":str(result[i][4]),
-                "created_on":result[i][6].strftime('%m/%d/%Y'),
+                "created_on":result[i][6],
                 "loc_latitude":result[i][7],
                 "loc_longitude":result[i][8],
                 "radius":result[i][9]
@@ -107,9 +110,10 @@ def get_chat_d(chat_id):
             "name":result[2],
             "description":result[3],
             "image":str(result[4]),
-            "created_on":result[6].strftime('%m/%d/%Y'),
+            "created_on":result[6],
             "loc_latitude":result[7],
             "loc_longitude":result[8],
+            'radius':result[9]
         }
         return chat_json
     except Exception as err:
@@ -135,7 +139,7 @@ def get_msg_list_by_chat(chat_id):
                 "senderId": result[i-1][1],
                 "chatId": result[i-1][2],
                 "content": result[i-1][3],
-                "sendOn": result[i-1][5].strftime('%m/%d/%Y %H:%M:%S'),
+                "sendOn": result[i-1][5],
                 "imageB64": str(result[i-1][4])
             }
             processed_result.append(dict_result)
@@ -225,23 +229,17 @@ def del_user(user_id):
         sql = "DELETE FROM users WHERE user_id = {}".format(user_id)
         dbcursor.execute(sql)
         mydb.commit()
+        return True
     except Exception as err:
         print("Error, please check user exists: {}".format(err))
+        return False
 
 def edit_user(user_id, f_name, s_name, bio, email, filename, prof_pic, birthday):
     try:
-        dbcursor.execute('SELECT email FROM users WHERE user_id = "{}"'.format(user_id))
-        mydb.commit()
-        emailIsNew = dbcursor.fetchone()
-        sql = "UPDATE users SET (f_name, s_name, bio, email, prof_pic_filename, prof_pic, birthday) VALUES (%s, %s, %s, %s, %s, %s, %s) where user_id = {}".format(user_id)
+        sql = "UPDATE users SET f_name=%s, s_name=%s, bio=%s, email=%s, prof_pic_filename=%s, prof_pic=%s, birthday=%s WHERE user_id = {}".format(user_id)
         val = (f_name, s_name, str(bio), str(email), filename, prof_pic, str(birthday))
         dbcursor.execute(sql, val)
         mydb.commit()
-        if(emailIsNew):
-            sql = "UPDATE users_email SET (email, confirmed_email) VALUES (%s, %s) where email = {}".format(email)
-            val = (email, 0)
-            dbcursor.execute(sql, val)
-            mydb.commit()
     except Exception as err:
         print("Couldn't edit user: {}".format(err))
 

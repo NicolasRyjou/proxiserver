@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from flask import Flask
 from flask import request
 from flask import redirect
@@ -125,7 +126,8 @@ def send_confirmation_of_email(reciever, password, sender_email, proxi_domain_ba
 def sendEmailFunc(email: str):
       random_code_temp = random.randint(100000, 999999)
       sqldb.create_new_confirmation_code(email, random_code_temp)
-      send_confirmation_of_email(email, EMAIL_PASSWORD, EMAIL_ADDRESS, PROXI_DOMAIN, random_code_temp) 
+      send_confirmation_of_email(email, EMAIL_PASSWORD, EMAIL_ADDRESS, PROXI_DOMAIN, random_code_temp)
+      return True 
 
 def on_init():
   api.add_resource(Chats, '/api/chats/<int:chat_id>')
@@ -140,7 +142,7 @@ def on_init():
   api.add_resource(checkVerificationCode, '/api/check-if-correct-code')
 
   chat_table_params = [
-      "chat_id INT AUTO_INCREMENT",
+      "chat_id INT AUTO_INCREMENT = 100000",
       "PRIMARY KEY (chat_id)",
       "creator_id INT",
       "name TEXT", 
@@ -165,7 +167,7 @@ def on_init():
       "chat_id INT",
       "user_id INT"]
   usrs_table_params = [
-      "user_id INT AUTO_INCREMENT",
+      "user_id INT AUTO_INCREMENT=100000",
       "PRIMARY KEY (user_id)",
       "f_name TEXT", 
       "s_name TEXT", 
@@ -227,14 +229,14 @@ class Chats(Resource):
         chat_json = request.data.decode("utf-8")
         chat_data=json.loads(chat_json)
         try:
-          sqldb.edit_chat(chat_id, chat_data["name"], chat_data["creator_id"], chat_data["location"], chat_data["icon"]["filename"], chat_data["icon"]["content"], chat_data["description"])
+          return {'success':sqldb.edit_chat(chat_id, chat_data["chatName"], chat_data["coordinates"], chat_data["description"], chat_data["radius"])}
         except Exception as err:
           print("Couldn't update data for chat {}: {}".format(chat_id, err))
           return {"success": False}
 
     def delete(self, chat_id):
         try:
-          sqldb.del_chat(chat_id)
+          return {'success':sqldb.del_chat(chat_id)}
         except Exception as err:
           print("Couldn't get data for chat {}: {}".format(chat_id, err))
           return {"success": False}
@@ -288,9 +290,10 @@ class User(Resource):
 
     def delete(self, user_id):
         try:
-          sqldb.del_user(user_id)
+          return {'success': sqldb.del_user(user_id)}
         except Exception as err:
           print("Couldn't delete user {}: {}".format(user_id, err))
+          return {'success': False}         
 class Messages(Resource):
     @use_kwargs({'hwmny': fields.Str(missing='default_val')}, location="query")
     def get(self, chat_id, hwmny):
@@ -307,11 +310,18 @@ class VerifyUser(Resource):
         if str(code) == str(ver_code):
           sqldb.confirm_user(email, True)
           if origin == "email":
-            return PROXI_DOMAIN
+            return str(PROXI_DOMAIN)
           if origin == "angular":
             return {"isCodeValid":True}
         elif code != ver_code:
           return "Wrong code, please try again"
+    @use_kwargs({'email': fields.Str(missing='default_val')}, location="query")
+    def post(self, email):
+      try:
+        sendEmailFunc(email)
+        return {'success': sendEmailFunc(email)}
+      except:
+        return {"success": False}
 class GetUserIdThoughEmail(Resource):
   @use_kwargs({'email': fields.Str(missing='default_val')}, location="query")
   def get(self, email):
