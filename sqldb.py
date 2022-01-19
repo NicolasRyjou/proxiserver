@@ -78,9 +78,12 @@ def del_chat(chat_id):
     except Exception as err:
         print("Error: {}. Check if chat_id exists".format(err))
 
-def get_chat_list():
+def get_chat_list(user_id):
     try:
-        dbcursor.execute("SELECT * FROM chats")
+        query_temp = ''
+        if user_id != None or 0:
+            query_temp = 'WHERE creator_id = {}'.format(user_id)
+        dbcursor.execute("SELECT * FROM chats {}".format(query_temp))
         result = dbcursor.fetchall()
         return_dict = []
         for i in range(len(result)-1):
@@ -99,7 +102,7 @@ def get_chat_list():
         return return_dict
     except Exception as err:
         print("Couldn't get data for chats: {}".format(err))
-        
+
 def get_chat_d(chat_id):
     try:
         dbcursor.execute("SELECT * FROM chats WHERE chat_id = {}".format(chat_id))

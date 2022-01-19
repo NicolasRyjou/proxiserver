@@ -140,9 +140,10 @@ def on_init():
   api.add_resource(IsUserVerified, '/api/is-verified/<int:user_id>')
   api.add_resource(GetNearMe, '/api/get-chats-near-me')
   api.add_resource(checkVerificationCode, '/api/check-if-correct-code')
+  api.add_resource(GetChatsByUser, '/api/my-chats/<int:user_id>')
 
   chat_table_params = [
-      "chat_id INT AUTO_INCREMENT = 100000",
+      "chat_id INT AUTO_INCREMENT",
       "PRIMARY KEY (chat_id)",
       "creator_id INT",
       "name TEXT", 
@@ -167,13 +168,12 @@ def on_init():
       "chat_id INT",
       "user_id INT"]
   usrs_table_params = [
-      "user_id INT AUTO_INCREMENT=100000",
+      "user_id INT AUTO_INCREMENT",
       "PRIMARY KEY (user_id)",
       "f_name TEXT", 
       "s_name TEXT", 
       "bio TEXT", 
       "email TEXT",
-      "UNIQUE KEY unique (email)",
       "prof_pic_filename TEXT",
       "prof_pic BLOB",
       "birthday TEXT",
@@ -192,12 +192,12 @@ def on_init():
     "visited_on TEXT",]
   usrs_passwords = []
 
-  # sqldb.drop_table("chats")
-  # sqldb.drop_table("messages")
-  # sqldb.drop_table("chat_usrs")
-  # sqldb.drop_table("users")
-  # sqldb.drop_table("users_email")
-  # sqldb.drop_table("users_visited")
+  sqldb.drop_table("chats")
+  sqldb.drop_table("messages")
+  sqldb.drop_table("chat_usrs")
+  sqldb.drop_table("users")
+  sqldb.drop_table("users_email")
+  sqldb.drop_table("users_visited")
   
   sqldb.gen_table("chats", chat_table_params)
   sqldb.gen_table("messages", messages_table_params)
@@ -360,7 +360,7 @@ class RecentChats(Resource):
 class GetNearMe(Resource):
     @use_kwargs({'lat': fields.Str(missing='default_val'),'lng': fields.Str(missing='default_val')}, location="query")
     def get(self, lat, lng):
-      chat_list = sqldb.get_chat_list()
+      chat_list = sqldb.get_chat_list(None)
       return_list = []
       p1 = {"lat":float(lat), "lng":float(lng)}
       for i in range(len(chat_list)):
@@ -380,7 +380,12 @@ class checkVerificationCode(Resource):
       return {'validityOfCode':True}
     if(int(code) != int(sqldb.check_confirmation_code(email)['code'])):
       return {'validityOfCode':False}
-
+class GetChatsByUser(Resource):
+  def get(self, user_id):
+        try:
+          return sqldb.get_chat_list(user_id)
+        except Exception as err:
+          print("Couldn't get chats for use: {}".format(err))
 if __name__ == '__main__':
   on_init()
-  app.run()
+  app.run(host='0.0.0.0')
