@@ -78,6 +78,17 @@ def del_chat(chat_id):
     except Exception as err:
         print("Error: {}. Check if chat_id exists".format(err))
 
+def update_chat_owner(prev_id, new_id):
+    try:
+        sql = "UPDATE chats SET creator_id=%s WHERE chat_id = {}".format(prev_id)
+        val = (new_id)
+        dbcursor.execute(sql, val)
+        mydb.commit()
+        return True
+    except Exception as err:
+        print("Couldn't edit chat: {}".format(err))
+        return False
+
 def get_chat_list(user_id):
     try:
         query_temp = ''
@@ -86,7 +97,7 @@ def get_chat_list(user_id):
         dbcursor.execute("SELECT * FROM chats {}".format(query_temp))
         result = dbcursor.fetchall()
         return_dict = []
-        for i in range(len(result)-1):
+        for i in range(len(result)):
             chat_json = {
                 "chat_id":result[i][0],
                 "creator_id":result[i][1],
@@ -125,7 +136,7 @@ def get_chat_d(chat_id):
 #MESSAGES
 def get_msg_by_msg_id(message_id):
     try:
-        dbcursor.execute("SELECT * FROM messages WHERE message_id = {}".format(message_id))
+        dbcursor.execute("SELECT * FROM messages WHERE message_id = {} ORDER BY id ASC".format(message_id))
         result = dbcursor.fetchall()
         return result
     except Exception as err:
@@ -136,7 +147,7 @@ def get_msg_list_by_chat(chat_id):
         dbcursor.execute("SELECT * FROM messages WHERE chat_id = {}".format(chat_id))
         result = dbcursor.fetchall()
         processed_result = []
-        for i in range(len(result)-1):
+        for i in range(len(result)):
             dict_result = {
                 "messageId": result[i-1][0],
                 "senderId": result[i-1][1],
@@ -311,3 +322,11 @@ def return_recent_chats_ids(user_id):
         return {"ids":temp}
     except Exception as err:
         print("Couldn't get recent chats: {}".format(err))
+
+def del_recent(user_id):
+    try:
+        sql = "DELETE FROM users_visited WHERE user_id = {}".format(user_id)
+        dbcursor.execute(sql)
+        mydb.commit()
+    except Exception as err:
+        print("Error: {}. Check if user_id exists".format(err))

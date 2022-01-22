@@ -43,7 +43,7 @@ app.config['SECRET_KEY'] = gVar["secret_key"]
 #EMAIL
 EMAIL_ADDRESS = 'noReplyProxi@gmail.com'
 EMAIL_PASSWORD = 'proxiNoReply'
-PROXI_DOMAIN = 'https://127.0.0.1:5000'
+PROXI_DOMAIN = '192.168.18.14:5000'
 
 #VAR
 EARTH_RADIUS = 6371 #m
@@ -80,7 +80,6 @@ def on_new_message(data_json):
       data["image"]["content"]
     )
     new_data = sqldb.get_msg_by_msg_id(new_message_id)
-    print(">>> Recieved message from {} on chat {}. CONTENT: {}".format(data["user_id"],data["chat_id"],data["content"]))
     socketio.emit('message', data, room=data['chat_id'])
 
 @socketio.on('delete_message')
@@ -192,12 +191,12 @@ def on_init():
     "visited_on TEXT",]
   usrs_passwords = []
 
-  sqldb.drop_table("chats")
-  sqldb.drop_table("messages")
-  sqldb.drop_table("chat_usrs")
-  sqldb.drop_table("users")
-  sqldb.drop_table("users_email")
-  sqldb.drop_table("users_visited")
+  # sqldb.drop_table("chats")
+  # sqldb.drop_table("messages")
+  # sqldb.drop_table("chat_usrs")
+  # sqldb.drop_table("users")
+  # sqldb.drop_table("users_email")
+  # sqldb.drop_table("users_visited")
   
   sqldb.gen_table("chats", chat_table_params)
   sqldb.gen_table("messages", messages_table_params)
@@ -291,6 +290,8 @@ class User(Resource):
 
     def delete(self, user_id):
         try:
+          sqldb.update_chat_owner(user_id, 3)
+          sqldb.del_recent(user_id)
           return {'success': sqldb.del_user(user_id)}
         except Exception as err:
           print("Couldn't delete user {}: {}".format(user_id, err))
@@ -316,12 +317,12 @@ class VerifyUser(Resource):
             return {"isCodeValid":True}
         elif code != ver_code:
           return "Wrong code, please try again"
-    @use_kwargs({'email': fields.Str(missing='default_val')}, location="query")
-    def post(self, email):
+    def post(self):
       try:
-        sendEmailFunc(email)
-        return {'success': sendEmailFunc(email)}
-      except:
+        user_data = json.loads(request.data.decode('utf-8'))
+        return {'success': sendEmailFunc(user_data['email'])}
+      except Exception as err:
+        print(err)
         return {"success": False}
 class GetUserIdThoughEmail(Resource):
   @use_kwargs({'email': fields.Str(missing='default_val')}, location="query")
